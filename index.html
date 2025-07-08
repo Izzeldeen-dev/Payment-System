@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Management System</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f9fafb;
+            color: #111827;
+            line-height: 1.6;
+        }
+        
+        .sync-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+        }
+        
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+        
+        .sync-dot.offline {
+            background: #ef4444;
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 16px;
+            font-size: 24px;
+        }
+        
+        .stat-icon.blue { background-color: #dbeafe; color: #2563eb; }
+        .stat-icon.green { background-color: #dcfce7; color: #16a34a; }
+        .stat-icon.yellow { background-color: #fef3c7; color: #d97706; }
+        .stat-icon.red { background-color: #fee2e2; color: #dc2626; }
+        
+        .stat-info h3 {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+        
+        .stat-info p {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        
+        .btn {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+        }
+        
+        .btn:hover {
+            background-color: #1d4ed8;
+        }
+        
+        .btn-success {
+            background-color: #16a34a;
+        }
+        
+        .btn-success:hover {
+            background-color: #15803d;
+        }
+        
+        .btn-secondary {
+            background-color: #6b7280;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        
+        .payment-header {
+            margin-bottom: 40px;
+        }
+        
+        .payment-header h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+        
+        .payment-header p {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+        
+        .payment-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .payment-stat-card {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+        }
+        
+        .payment-alerts-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+            overflow: hidden;
+        }
+        
+        .payment-alerts-header {
+            padding: 20px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+        }
+        
+        .payment-alerts-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        
+        .payment-alerts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            padding: 20px;
+        }
+        
+        .alert-item {
+            padding: 16px;
+            border-radius: 6px;
+            border: 1px solid;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+        
+        .alert-item.critical {
+            background-color: #fef2f2;
+            border-color: #fecaca;
+        }
+        
+        .alert-item.warning {
+            background-color: #fffbeb;
+            border-color: #fed7aa;
+        }
+        
+        .alert-item.info {
+            background-color: #eff6ff;
+            border-color: #bfdbfe;
+        }
+        
+        .alert-content {
+            flex: 1;
+        }
+        
+        .alert-content h4 {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        
+        .alert-content p {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+        
+        .dismiss-btn {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+        }
+        
+        .payment-cards-section {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .payment-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 16px;
+        }
+        
+        .payment-section-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .payment-filters {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .payment-filters select {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        
+        .payment-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .payment-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .payment-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .payment-card.paid::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #16a34a, #059669);
+        }
+        
+        .payment-card.pending::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        
+        .payment-card.overdue::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #dc2626, #b91c1c);
+        }
+        
+        .payment-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .payment-client-info h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+        
+        .payment-client-info .payment-cycle {
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        
+        .payment-status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .payment-status-badge.paid {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        
+        .payment-status-badge.pending {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        
+        .payment-status-badge.overdue {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .payment-details {
+            margin-bottom: 16px;
+        }
+        
+        .payment-detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+        }
+        
+        .payment-detail-label {
+            color: #6b7280;
+        }
+        
+        .payment-detail-value {
+            font-weight: 500;
+            color: #111827;
+        }
+        
+        .payment-detail-value.overdue {
+            color: #dc2626;
+            font-weight: 600;
+        }
+        
+        .payment-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .payment-action-btn {
+            flex: 1;
+            padding: 8px 12px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .payment-action-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .payment-action-btn.success {
+            background: #16a34a;
+        }
+        
+        .payment-action-btn.success:hover {
+            background: #15803d;
+        }
+        
+        /* Payment Checklist Styles */
+        .payment-checklist {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .checklist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .checklist-header h4 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            margin: 0;
+        }
+        
+        .reminder-badge {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            animation: pulse 2s infinite;
+        }
+        
+        .checklist-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .checklist-item {
+            transition: all 0.2s ease;
+        }
+        
+        .checklist-item.highlight {
+            background: #fef2f2;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #fecaca;
+        }
+        
+        .checkbox-container {
+            display: flex;
+            align-items: flex-start;
+            cursor: pointer;
+            font-size: 0.75rem;
+            color: #374151;
+            line-height: 1.4;
+        }
+        
+        .checkbox-container input {
+            display: none;
+        }
+        
+        .checkmark {
+            width: 16px;
+            height: 16px;
+            background-color: #f3f4f6;
+            border: 2px solid #d1d5db;
+            border-radius: 3px;
+            margin-right: 8px;
+            margin-top: 2px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .checkbox-container input:checked + .checkmark {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+        }
+        
+        .checkbox-container input:checked + .checkmark:after {
+            content: '✓';
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .checkmark.auto-checked {
+            background-color: #16a34a;
+            border-color: #16a34a;
+        }
+        
+        .checkmark.auto-checked:after {
+            content: '✓';
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .checkbox-container:hover .checkmark {
+            border-color: #3b82f6;
+        }
+        
+        .checkbox-container input:disabled {
+            cursor: not-allowed;
+        }
+        
+        .checkbox-container input:disabled + .checkmark {
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+        
+        .checklist-text {
+            flex: 1;
+        }
+        
+        /* Success Message Styles */
+        .success-message {
+            background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+            border: 1px solid #86efac;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            animation: slideInFromTop 0.3s ease-out;
+        }
+        
+        .success-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .success-icon {
+            font-size: 1.125rem;
+        }
+        
+        .success-text {
+            color: #166534;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .success-message.fade-out {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
+        
+        @keyframes slideInFromTop {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+        }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .modal h3 {
+            margin-bottom: 16px;
+            color: #111827;
+        }
+
+        .modal p {
+            margin-bottom: 20px;
+            color: #6b7280;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+        
+        .form-group input, .form-group select {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        /* Payment Modal Enhanced Styles */
+        .payment-modal-info {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        
+        .modal-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .info-item label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #6b7280;
+            text-transform: uppercase;
+        }
+        
+        .info-value {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #111827;
+        }
+        
+        .info-value.next-due {
+            color: #3b82f6;
+        }
+        
+        /* Animation for updating cards */
+        .payment-cards-grid.updating {
+            opacity: 0.7;
+            transition: opacity 0.2s ease;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sync Indicator -->
+    <div class="sync-indicator">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-status">Connected</span>
+    </div>
+
+    <div class="container">
+        <!-- Payment Header -->
+        <div class="payment-header">
+            <h1>💰 Payment Management</h1>
+            <p>Track client payments and billing cycles</p>
+        </div>
+
+        <!-- Payment Stats -->
+        <div class="payment-stats-grid">
+            <div class="payment-stat-card">
+                <div class="stat-icon green">💰</div>
+                <div class="stat-info">
+                    <h3>Total Active Subscriptions</h3>
+                    <p id="total-subscriptions">0</p>
+                </div>
+            </div>
+            <div class="payment-stat-card">
+                <div class="stat-icon blue">✅</div>
+                <div class="stat-info">
+                    <h3>Paid This Month</h3>
+                    <p id="paid-this-month" style="color: #16a34a;">0</p>
+                </div>
+            </div>
+            <div class="payment-stat-card">
+                <div class="stat-icon yellow">⏳</div>
+                <div class="stat-info">
+                    <h3>Pending Payments</h3>
+                    <p id="pending-payments" style="color: #d97706;">0</p>
+                </div>
+            </div>
+            <div class="payment-stat-card">
+                <div class="stat-icon red">❌</div>
+                <div class="stat-info">
+                    <h3>Overdue Payments</h3>
+                    <p id="overdue-payments" style="color: #dc2626;">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Alerts -->
+        <div class="payment-alerts-section" id="payment-alerts-section">
+            <div class="payment-alerts-header">
+                <span style="font-size: 24px;">🚨</span>
+                <h2>Payment Alerts (<span id="payment-alert-count">0</span>)</h2>
+            </div>
+            <div class="payment-alerts-grid" id="payment-alerts-container">
+                <!-- Payment alerts will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Payment Cards -->
+        <div class="payment-cards-section">
+            <div class="payment-section-header">
+                <h2>Client Payment Status</h2>
+                <div class="payment-filters">
+                    <label>Filter:</label>
+                    <select id="payment-status-filter" onchange="updatePaymentCards()">
+                        <option value="all">All Clients</option>
+                        <option value="paid">Paid</option>
+                        <option value="pending">Pending</option>
+                        <option value="overdue">Overdue</option>
+                    </select>
+                </div>
+            </div>
+            <div class="payment-cards-grid" id="payment-cards-grid">
+                <!-- Payment cards will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="payment-modal" class="modal">
+        <div class="modal-content">
+            <h3>💰 Update Payment</h3>
+            <p>Update payment information for <strong id="payment-client-name"></strong></p>
+            <div class="form-group">
+                <label>Payment Status:</label>
+                <select id="payment-status" style="width: 100%;">
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="overdue">Overdue</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Payment Date (if paid):</label>
+                <input type="date" id="payment-date" style="width: 100%;">
+            </div>
+            <div class="form-group">
+                <label>Billing Cycle:</label>
+                <select id="billing-cycle" style="width: 100%;">
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly (3 months)</option>
+                    <option value="semi-annual">Semi-Annual (6 months)</option>
+                    <option value="annual">Annual (12 months)</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closePaymentModal()">Cancel</button>
+                <button class="btn btn-success" onclick="updatePayment()">Update Payment</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // FIREBASE CONFIGURATION
+        // ============================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDNMzO17wu4NOaR2TjT419f0IzB-pWzU5M",
+            authDomain: "becontent-33415.firebaseapp.com",
+            databaseURL: "https://becontent-33415-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "becontent-33415",
+            storageBucket: "becontent-33415.firebasestorage.app",
+            messagingSenderId: "967557303388",
+            appId: "1:967557303388:web:b263a25fea91824710ea99",
+            measurementId: "G-Z23YF3S7VQ"
+        };
+
+        // Initialize Firebase
+        let database;
+        let clientsRef;
+        
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            clientsRef = database.ref('clients');
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+        }
+
+        // Local clients array
+        let clients = [];
+        let dismissedPaymentAlerts = new Set();
+        let currentPaymentClientId = null;
+
+        // Calculate billing cycle months
+        function getBillingCycleMonths(cycle) {
+            switch(cycle) {
+                case 'monthly': return 1;
+                case 'quarterly': return 3;
+                case 'semi-annual': return 6;
+                case 'annual': return 12;
+                default: return 1;
+            }
+        }
+
+        // Calculate next due date based on join date and billing cycle
+        function calculateNextDueDate(joinDate, billingCycle = 'monthly', lastPaidDate = null) {
+            if (!joinDate) return null;
+            
+            const join = new Date(joinDate);
+            const cycleMonths = getBillingCycleMonths(billingCycle);
+            const today = new Date();
+            
+            // Start from last paid date if available, otherwise from join date
+            let baseDate = lastPaidDate ? new Date(lastPaidDate) : new Date(join);
+            
+            // Find the next due date
+            let nextDue = new Date(baseDate);
+            nextDue.setMonth(nextDue.getMonth() + cycleMonths);
+            
+            // If the next due date is in the past, keep adding cycles until we get a future date
+            while (nextDue <= today) {
+                nextDue.setMonth(nextDue.getMonth() + cycleMonths);
+            }
+            
+            return nextDue;
+        }
+
+        // Calculate payment status
+        function calculatePaymentStatus(client) {
+            if (client.isOffboarded) return 'inactive';
+            
+            const today = new Date();
+            const nextDue = calculateNextDueDate(
+                client.joinDate, 
+                client.billingCycle || 'monthly', 
+                client.lastPaidDate
+            );
+            
+            if (!nextDue) return 'unknown';
+            
+            // Check if payment is marked as paid for current period
+            if (client.paymentStatus === 'paid' && client.lastPaidDate) {
+                const lastPaid = new Date(client.lastPaidDate);
+                const cycleMonths = getBillingCycleMonths(client.billingCycle || 'monthly');
+                const nextDueFromLastPaid = new Date(lastPaid);
+                nextDueFromLastPaid.setMonth(nextDueFromLastPaid.getMonth() + cycleMonths);
+                
+                if (today < nextDueFromLastPaid) {
+                    return 'paid';
+                }
+            }
+            
+            // Check if overdue (due date has passed)
+            if (today > nextDue) {
+                return 'overdue';
+            }
+            
+            // Check if due within next 7 days
+            const daysUntilDue = Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
+            if (daysUntilDue <= 7) {
+                return 'due-soon';
+            }
+            
+            return 'pending';
+        }
+
+        // Update payment dashboard
+        function updatePaymentDashboard() {
+            updatePaymentStats();
+            updatePaymentAlerts();
+            updatePaymentCards();
+        }
+
+        // Update payment statistics
+        function updatePaymentStats() {
+            const activeClients = clients.filter(c => !c.isOffboarded);
+            let paidCount = 0;
+            let pendingCount = 0;
+            let overdueCount = 0;
+            
+            activeClients.forEach(client => {
+                const status = calculatePaymentStatus(client);
+                if (status === 'paid') paidCount++;
+                else if (status === 'overdue') overdueCount++;
+                else if (status === 'pending' || status === 'due-soon') pendingCount++;
+            });
+            
+            document.getElementById('total-subscriptions').textContent = activeClients.length;
+            document.getElementById('paid-this-month').textContent = paidCount;
+            document.getElementById('pending-payments').textContent = pendingCount;
+            document.getElementById('overdue-payments').textContent = overdueCount;
+        }
+
+        // Update payment alerts
+        function updatePaymentAlerts() {
+            const alertsContainer = document.getElementById('payment-alerts-container');
+            const alertsSection = document.getElementById('payment-alerts-section');
+            alertsContainer.innerHTML = '';
+            let alertCount = 0;
+            
+            const activeClients = clients.filter(c => !c.isOffboarded);
+            
+            activeClients.forEach(client => {
+                const status = calculatePaymentStatus(client);
+                const nextDue = calculateNextDueDate(
+                    client.joinDate, 
+                    client.billingCycle || 'monthly', 
+                    client.lastPaidDate
+                );
+                
+                // Overdue payment alerts
+                if (status === 'overdue' && !dismissedPaymentAlerts.has(`overdue-${client.id}`)) {
+                    const daysOverdue = Math.ceil((new Date() - nextDue) / (1000 * 60 * 60 * 24));
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert-item critical';
+                    alertDiv.innerHTML = `
+                        <div class="alert-content">
+                            <h4>${client.name}</h4>
+                            <p>Payment overdue by ${daysOverdue} days</p>
+                        </div>
+                        <button class="dismiss-btn" onclick="dismissPaymentAlert('overdue-${client.id}', this)">✕</button>`;
+                    alertsContainer.appendChild(alertDiv);
+                    alertCount++;
+                }
+                
+                // Due soon alerts
+                if (status === 'due-soon' && !dismissedPaymentAlerts.has(`due-soon-${client.id}`)) {
+                    const daysUntilDue = Math.ceil((nextDue - new Date()) / (1000 * 60 * 60 * 24));
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert-item warning';
+                    alertDiv.innerHTML = `
+                        <div class="alert-content">
+                            <h4>${client.name}</h4>
+                            <p>Payment due in ${daysUntilDue} days</p>
+                        </div>
+                        <button class="dismiss-btn" onclick="dismissPaymentAlert('due-soon-${client.id}', this)">✕</button>`;
+                    alertsContainer.appendChild(alertDiv);
+                    alertCount++;
+                }
+            });
+            
+            document.getElementById('payment-alert-count').textContent = alertCount;
+            alertsSection.style.display = alertCount > 0 ? 'block' : 'none';
+        }
+
+        // Dismiss payment alert
+        function dismissPaymentAlert(alertId, button) {
+            dismissedPaymentAlerts.add(alertId);
+            button.parentElement.remove();
+            const alertCount = document.querySelectorAll('#payment-alerts-container .alert-item').length;
+            document.getElementById('payment-alert-count').textContent = alertCount;
+            
+            if (alertCount === 0) {
+                document.getElementById('payment-alerts-section').style.display = 'none';
+            }
+        }
+
+        // Update payment cards
+        function updatePaymentCards() {
+            const container = document.getElementById('payment-cards-grid');
+            const filter = document.getElementById('payment-status-filter').value;
+            container.innerHTML = '';
+            
+            let filteredClients = clients.filter(c => !c.isOffboarded);
+            
+            // Apply status filter
+            if (filter !== 'all') {
+                filteredClients = filteredClients.filter(client => {
+                    const status = calculatePaymentStatus(client);
+                    if (filter === 'paid') return status === 'paid';
+                    if (filter === 'pending') return status === 'pending' || status === 'due-soon';
+                    if (filter === 'overdue') return status === 'overdue';
+                    return true;
+                });
+            }
+            
+            if (filteredClients.length === 0) {
+                container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #6b7280;">No clients match the selected filter.</div>';
+                return;
+            }
+            
+            filteredClients.forEach(client => {
+                const status = calculatePaymentStatus(client);
+                const nextDue = calculateNextDueDate(
+                    client.joinDate, 
+                    client.billingCycle || 'monthly', 
+                    client.lastPaidDate
+                );
+                
+                const card = document.createElement('div');
+                card.className = `payment-card ${status === 'paid' ? 'paid' : status === 'overdue' ? 'overdue' : 'pending'}`;
+                
+                const formatDate = (date) => {
+                    return date ? new Date(date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    }) : 'N/A';
+                };
+                
+                const getStatusText = (status) => {
+                    switch(status) {
+                        case 'paid': return 'Paid';
+                        case 'overdue': return 'Overdue';
+                        case 'due-soon': return 'Due Soon';
+                        case 'pending': return 'Pending';
+                        default: return 'Unknown';
+                    }
+                };
+                
+                const getBillingCycleText = (cycle) => {
+                    switch(cycle) {
+                        case 'monthly': return 'Monthly';
+                        case 'quarterly': return 'Quarterly';
+                        case 'semi-annual': return 'Semi-Annual';
+                        case 'annual': return 'Annual';
+                        default: return 'Monthly';
+                    }
+                };
+                
+                card.innerHTML = `
+                    <div class="payment-card-header">
+                        <div class="payment-client-info">
+                            <h3>${client.name}</h3>
+                            <div class="payment-cycle">${getBillingCycleText(client.billingCycle || 'monthly')}</div>
+                        </div>
+                        <div class="payment-status-badge ${status === 'paid' ? 'paid' : status === 'overdue' ? 'overdue' : 'pending'}">
+                            ${getStatusText(status)}
+                        </div>
+                    </div>
+                    
+                    <div class="payment-details">
+                        <div class="payment-detail-row">
+                            <span class="payment-detail-label">Next Due Date:</span>
+                            <span class="payment-detail-value ${status === 'overdue' ? 'overdue' : ''}">${formatDate(nextDue)}</span>
+                        </div>
+                        <div class="payment-detail-row">
+                            <span class="payment-detail-label">Last Paid:</span>
+                            <span class="payment-detail-value">${formatDate(client.lastPaidDate)}</span>
+                        </div>
+                        <div class="payment-detail-row">
+                            <span class="payment-detail-label">Account Manager:</span>
+                            <span class="payment-detail-value">${client.accountManager || 'Not assigned'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="payment-actions">
+                        ${status !== 'paid' ? 
+                            '<button class="payment-action-btn success" onclick="markAsPaid(\'' + client.id + '\')">Mark as Paid</button>' : 
+                            '<button class="payment-action-btn" onclick="openPaymentModal(\'' + client.id + '\')">Update Payment</button>'
+                        }
+                        <button class="payment-action-btn" onclick="openPaymentModal('${client.id}')">Edit Details</button>
+                    </div>
+                    
+                    ${generatePaymentChecklist(client, status, nextDue)}
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        // Generate payment checklist for each card
+        function generatePaymentChecklist(client, status, nextDue) {
+            const today = new Date();
+            const dueDate = new Date(nextDue);
+            const hoursUntilDue = (dueDate - today) / (1000 * 60 * 60);
+            const show48HourReminder = hoursUntilDue <= 48 && hoursUntilDue > 0 && status !== 'paid';
+            
+            // Get checklist state from client data
+            const messageSent = client.reminderMessageSent || false;
+            const paymentReceived = status === 'paid';
+            
+            return `
+                <div class="payment-checklist">
+                    <div class="checklist-header">
+                        <h4>📋 Payment Tasks</h4>
+                        ${show48HourReminder ? '<span class="reminder-badge">48h Reminder Active</span>' : ''}
+                    </div>
+                    <div class="checklist-items">
+                        <div class="checklist-item ${show48HourReminder ? 'highlight' : ''}">
+                            <label class="checkbox-container">
+                                <input type="checkbox" ${messageSent ? 'checked' : ''} 
+                                    onchange="updateChecklistItem('${client.id}', 'reminderMessageSent', this.checked)">
+                                <span class="checkmark"></span>
+                                <span class="checklist-text">
+                                    📱 Message sent to client (48h before due)
+                                    ${show48HourReminder ? '<br><small style="color: #dc2626; font-weight: 600;">⚠️ Send WhatsApp reminder now!</small>' : ''}
+                                </span>
+                            </label>
+                        </div>
+                        <div class="checklist-item">
+                            <label class="checkbox-container">
+                                <input type="checkbox" ${paymentReceived ? 'checked' : ''} disabled>
+                                <span class="checkmark ${paymentReceived ? 'auto-checked' : ''}"></span>
+                                <span class="checklist-text">
+                                    ✅ Payment confirmation received
+                                    ${paymentReceived ? '<br><small style="color: #16a34a;">Auto-checked when payment marked as received</small>' : ''}
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Mark payment as paid
+        function markAsPaid(clientId) {
+            const client = clients.find(c => c.id === clientId);
+            if (!client) return;
+            
+            // Calculate the due date for this payment cycle
+            const nextDue = calculateNextDueDate(
+                client.joinDate, 
+                client.billingCycle || 'monthly', 
+                client.lastPaidDate
+            );
+            
+            // Use the due date as the payment date (not today)
+            const paymentDate = nextDue ? nextDue.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+            
+            const updatedClient = {
+                ...client,
+                paymentStatus: 'paid',
+                lastPaidDate: paymentDate,
+                reminderMessageSent: false, // Reset for next billing cycle
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Update in Firebase
+            clientsRef.child(clientId).set(updatedClient);
+            
+            // Show success message
+            showSuccessMessage('Payment marked as received on due date!');
+            
+            // Update UI immediately without waiting for Firebase
+            updatePaymentCardsImmediate();
+        }
+
+        // Open payment modal
+        function openPaymentModal(clientId) {
+            const client = clients.find(c => c.id === clientId);
+            if (!client) return;
+            
+            currentPaymentClientId = clientId;
+            
+            // Calculate current and next due dates
+            const currentDueDate = calculateNextDueDate(
+                client.joinDate, 
+                client.billingCycle || 'monthly', 
+                client.lastPaidDate
+            );
+            
+            const nextDueDate = calculateNextDueDate(
+                client.joinDate, 
+                client.billingCycle || 'monthly', 
+                currentDueDate ? currentDueDate.toISOString().split('T')[0] : client.lastPaidDate
+            );
+            
+            document.getElementById('payment-client-name').textContent = client.name;
+            document.getElementById('payment-status').value = client.paymentStatus || 'pending';
+            
+            // Set payment date to current due date by default
+            const defaultPaymentDate = currentDueDate ? currentDueDate.toISOString().split('T')[0] : 
+                (client.lastPaidDate || new Date().toISOString().split('T')[0]);
+            document.getElementById('payment-date').value = defaultPaymentDate;
+            
+            document.getElementById('billing-cycle').value = client.billingCycle || 'monthly';
+            
+            // Update modal with due date information
+            updatePaymentModalInfo(currentDueDate, nextDueDate);
+            
+            document.getElementById('payment-modal').style.display = 'block';
+        }
+
+        // Update payment modal with due date information
+        function updatePaymentModalInfo(currentDueDate, nextDueDate) {
+            const modalContent = document.querySelector('#payment-modal .modal-content');
+            
+            // Remove existing info if present
+            const existingInfo = modalContent.querySelector('.payment-modal-info');
+            if (existingInfo) {
+                existingInfo.remove();
+            }
+            
+            // Add due date information
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'payment-modal-info';
+            infoDiv.innerHTML = `
+                <div class="modal-info-grid">
+                    <div class="info-item">
+                        <label>Current Due Date:</label>
+                        <span class="info-value">${currentDueDate ? currentDueDate.toLocaleDateString('en-US', {
+                            year: 'numeric', month: 'short', day: 'numeric'
+                        }) : 'N/A'}</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Next Due Date:</label>
+                        <span class="info-value next-due">${nextDueDate ? nextDueDate.toLocaleDateString('en-US', {
+                            year: 'numeric', month: 'short', day: 'numeric'
+                        }) : 'N/A'}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Insert after the client name paragraph
+            const clientNameP = modalContent.querySelector('p');
+            clientNameP.parentNode.insertBefore(infoDiv, clientNameP.nextSibling);
+        }
+
+        // Close payment modal
+        function closePaymentModal() {
+            document.getElementById('payment-modal').style.display = 'none';
+            currentPaymentClientId = null;
+        }
+
+        // Update payment
+        function updatePayment() {
+            if (!currentPaymentClientId) return;
+            
+            const client = clients.find(c => c.id === currentPaymentClientId);
+            if (!client) return;
+            
+            const paymentStatus = document.getElementById('payment-status').value;
+            const paymentDate = document.getElementById('payment-date').value;
+            const billingCycle = document.getElementById('billing-cycle').value;
+            
+            const updatedClient = {
+                ...client,
+                paymentStatus: paymentStatus,
+                lastPaidDate: paymentStatus === 'paid' && paymentDate ? paymentDate : client.lastPaidDate,
+                billingCycle: billingCycle,
+                reminderMessageSent: paymentStatus === 'paid' ? false : client.reminderMessageSent, // Reset if paid
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Update in Firebase
+            clientsRef.child(currentPaymentClientId).set(updatedClient);
+            
+            closePaymentModal();
+            showSuccessMessage('Payment information updated successfully!');
+            
+            // Update UI immediately
+            updatePaymentCardsImmediate();
+        }
+
+        // Update checklist item
+        function updateChecklistItem(clientId, field, value) {
+            const client = clients.find(c => c.id === clientId);
+            if (!client) return;
+            
+            const updatedClient = {
+                ...client,
+                [field]: value,
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Update in Firebase
+            clientsRef.child(clientId).set(updatedClient);
+            
+            // Show success feedback
+            showSuccessMessage(value ? 'Task marked as completed!' : 'Task marked as pending');
+            
+            // Update UI immediately
+            setTimeout(() => updatePaymentCardsImmediate(), 100);
+        }
+
+        // Update payment cards immediately (without waiting for Firebase)
+        function updatePaymentCardsImmediate() {
+            // Add smooth animation class
+            const container = document.getElementById('payment-cards-grid');
+            container.classList.add('updating');
+            
+            setTimeout(() => {
+                updatePaymentCards();
+                updatePaymentStats();
+                updatePaymentAlerts();
+                container.classList.remove('updating');
+            }, 100);
+        }
+
+        // Show success message
+        function showSuccessMessage(message) {
+            // Remove existing success message if present
+            const existingMessage = document.querySelector('.success-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
+            
+            // Create success message
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.innerHTML = `
+                <div class="success-content">
+                    <span class="success-icon">✅</span>
+                    <span class="success-text">${message}</span>
+                </div>
+            `;
+            
+            // Add to top of container
+            const container = document.querySelector('.container');
+            container.insertBefore(successDiv, container.firstChild);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.classList.add('fade-out');
+                    setTimeout(() => successDiv.remove(), 300);
+                }
+            }, 3000);
+        }
+
+        // Update sync indicator
+        function updateSyncIndicator(isConnected) {
+            const dot = document.getElementById('sync-dot');
+            const status = document.getElementById('sync-status');
+            
+            if (isConnected) {
+                dot.classList.remove('offline');
+                status.textContent = 'Connected';
+            } else {
+                dot.classList.add('offline');
+                status.textContent = 'Offline';
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const paymentModal = document.getElementById('payment-modal');
+            if (event.target === paymentModal) {
+                closePaymentModal();
+            }
+        }
+
+        // Initialize Firebase listeners
+        clientsRef.on('value', (snapshot) => {
+            clients = [];
+            snapshot.forEach((childSnapshot) => {
+                clients.push(childSnapshot.val());
+            });
+            updatePaymentDashboard();
+        });
+
+        // Monitor connection state
+        const connectedRef = database.ref('.info/connected');
+        connectedRef.on('value', (snapshot) => {
+            updateSyncIndicator(snapshot.val() === true);
+        });
+    </script>
+</body>
+</html>
